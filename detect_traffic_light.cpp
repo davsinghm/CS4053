@@ -10,12 +10,15 @@ using namespace std;
 
 int low_threshold = 70;
 int local_minima_threshold = 3;
+int test_thresh = 5;
+
+RNG rng(12345);
 
 void theFunction(int, void *);
 
 //TODO merge multiple processing of hsv of source
 
-char * arg1;
+char *file_number;
 
 void erosion(Mat &src, Mat &dst, int erosion_elem, int erosion_size) {
 
@@ -139,7 +142,7 @@ void getHist(Mat src, Mat &hist) {
     imshow( "H-S Histogram", histImg );*/
 }
 
-void backProjection(const char* filename, Mat &target, Mat &thresh) {
+void backProjection(string filename, Mat &target, Mat &thresh) {
 
     Mat roi = imread(filename); //region of interest
     Mat roi_hsv, target_hsv;
@@ -171,7 +174,6 @@ void backProjection(const char* filename, Mat &target, Mat &thresh) {
     //dst = cv2.calcBackProject([hsvt],[0,1],roihist,[0,180,0,256],1)
     // Now convolute with circular disc
 
-
     //dilation(thresh, thresh, 2, 1); erosion(thresh, thresh, 2, 1);
     Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(5, 5), Point(-1,-1)); //disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
     
@@ -180,7 +182,7 @@ void backProjection(const char* filename, Mat &target, Mat &thresh) {
     //cv2.filter2D(dst,-1,disc,dst) //Python: cv2.filter2D(src, ddepth, kernel[, dst[, anchor[, delta[, borderType]]]]) → dst¶
     //C++: void filter2D(InputArray src, OutputArray dst, int depth, InputArray kernel, Point anchor=Point(-1,-1), double delta=0, int borderType=BORDER_DEFAULT );
 
-    double ret = threshold(thresh, thresh, 50, 255, THRESH_BINARY);
+    double ret = threshold(thresh, thresh, 100, 255, THRESH_BINARY);
 
     //# threshold and binary AND
     //ret,thresh = cv2.threshold(dst,50,255,0)
@@ -194,10 +196,10 @@ void backProjection(const char* filename, Mat &target, Mat &thresh) {
     //res = np.vstack((target,thresh,res))
     //cv2.imwrite('res.jpg',res)
 
-    namedWindow("Back Project", CV_WINDOW_AUTOSIZE);
+    namedWindow("Back Project: " + filename, CV_WINDOW_AUTOSIZE);
     int a;
-    createTrackbar("Does Nothing Yet", "Back Project", &a, 1, theFunction);
-    imshow("Back Project", thresh);
+    createTrackbar("Does Nothing Yet", "Back Project: " + filename, &a, 1, theFunction);
+    imshow("Back Project: " + filename, thresh);
 }
 
 void chamferMatching(Mat &chamfer_image, Mat &model, Mat &matching_image) {
@@ -233,10 +235,11 @@ void chamferMatching(Mat &chamfer_image, Mat &model, Mat &matching_image) {
     }
 }
 
-float getBlackVsWhitePixels(Mat &binImage, int &white, int &black) {
-    for (int i=0 ; i< binImage.rows; i++) {
-        for (int j=0 ; j< binImage.cols ; j++) {
-            int val = (int) (binImage.at<uchar>(i,j));
+void getBlackVsWhitePixels(Mat &bin_image, int &white, int &black) {
+    white = black = 0;
+    for (int i = 0; i < bin_image.rows; i++) {
+        for (int j = 0; j < bin_image.cols; j++) {
+            int val = (int) (bin_image.at<uchar>(i, j));
             if (val == 255) {
                 white++;
             } else
@@ -245,26 +248,26 @@ float getBlackVsWhitePixels(Mat &binImage, int &white, int &black) {
     }
 }
 
-int test_thresh = 6;
 //find ellipses around bitmap
-void findLights(const char* filename, Mat &source, Mat &edge_image, vector<Rect> &lights, Mat src_gray) {
+void findLights(Mat &source, Mat &edge_image, vector<Rect> &lights_r, vector<Rect> &lights_a, vector<Rect> &lights_g, Mat src_gray) {
 
     vector< vector<Point> > circle_contours;
     Mat circle = imread("CS4053/circle.png", CV_LOAD_IMAGE_COLOR);
-        cvtColor(circle, circle, CV_BGR2GRAY);
+    cvtColor(circle, circle, CV_BGR2GRAY);
     Canny(circle, circle, 50, 100, 3);
-        vector<Vec4i> hierarchy1;
+    vector<Vec4i> circle_hierarchy;
 
-    findContours(circle, circle_contours, hierarchy1, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+    findContours(circle, circle_contours, circle_hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
     if (circle_contours.size() < 1)
         cout << "error circle in png not found" << endl;
 
-    vector<Point>  circle_contour = circle_contours[0];
+    vector<Point> circle_contour = circle_contours[0];
 
-    Mat back_projected_light_map;
-    backProjection(filename, source, back_projected_light_map);
-    Mat drawing = src_gray;//Mat::zeros(edge_image.size(), CV_8UC3);
-    RNG rng(12345);
+    Mat b_proj_lights_map_red, b_proj_lights_map_amber, b_proj_lights_map_green;
+    backProjection("CS4053/red-all-2.png", source, b_proj_lights_map_red);
+    backProjection("CS4053/amber-all-1.png", source, b_proj_lights_map_amber);
+    backProjection("CS4053/green-all-6.png", source, b_proj_lights_map_green);
+    Mat drawing = src_gray; //Mat::zeros(edge_image.size(), CV_8UC3);
 
     // Mat canny_output;
     vector< vector<Point> > contours;
@@ -273,7 +276,7 @@ void findLights(const char* filename, Mat &source, Mat &edge_image, vector<Rect>
     //findContours(InputOutputArray image, OutputArrayOfArrays contours, OutputArray hierarchy, int mode, int method, Point offset=Point());
     findContours(edge_image, contours, hierarchy, RETR_TREE/*RETR_EXTERNAL*//*RETR_TREE*/, CHAIN_APPROX_NONE, Point(0, 0));
 
-    for(int i = 0; i< contours.size(); i++) {
+    for (int i = 0; i< contours.size(); i++) {
         vector<Point> contour = contours[i];
 
         //cout << matchShapes(contour, circle_contour, CV_CONTOURS_MATCH_I1, 0);
@@ -298,37 +301,53 @@ void findLights(const char* filename, Mat &source, Mat &edge_image, vector<Rect>
             //rectangle(source, point, Point(point.x + model.cols, point.y + model.rows), color, 2, 8, 0);
 
             //Mat hist;
-            Mat binImage = back_projected_light_map(light);
-            
-            int white = 0, black = 0;
-            getBlackVsWhitePixels(binImage, white, black);
+            int white, black;
+            Mat bin_image = b_proj_lights_map_green(light);
+            getBlackVsWhitePixels(bin_image, white, black);
 
-            //threshold(binImage, binImage, 0, 255, THRESH_BINARY);
+            //threshold(bin_image, bin_image, 0, 255, THRESH_BINARY);
 
-            //imshow("Potential Light: " + to_string(i), binImage);
-            //getHist(binImage, hist);
+            //imshow("Potential Light: " + to_string(i), bin_image);
+            //getHist(bin_image, hist);
 
-            float x = 1.0f * white / black; //white ratio
+            //float x = ; //white ratio
             //cout << "H Potential Light: i: " << hist.at<float>(1) << " vs " << hist.at<float>(0) << endl;
-            cout << "> Potential Light: i: " << white << " vs " << black << endl;
-            if (x > 0.5f) {
+            //cout << "> Potential Light: i: " << white << " vs " << black << endl;
+            if (1.0f * white / black > 0.7f) {
             
                 /*if (hist.at<float>(0) < best_hist && point.x < source.cols/2) {
                     best_hist = hist.at<float>(0);
                     best_model = point;
                 }*/
 
-                lights.push_back(light);
+                lights_g.push_back(light);
 
                 /*//TODO remove
                 for (int p = 0; p < contour.size(); p++) {
                     Point point = contour[p];
                     //Vec3b color = image.at<Vec3b>(Point(x,y));
                     drawing.at<Vec3b>(point) = Vec3b(0, 0, 255);
-                }*/
-                drawContours(drawing, contours, i, Scalar(0, 0, 255), CV_FILLED, 8, hierarchy, 2, Point());
+                }*/    
+                drawContours(drawing, contours, i, Scalar(74, 195, 139), CV_FILLED, 4, hierarchy, 0, Point());
+                continue; //since green is unique we don't need to check for red
             }
-            
+
+            bin_image = b_proj_lights_map_amber(light);
+            getBlackVsWhitePixels(bin_image, white, black); 
+            if (1.0f * white / black > 0.5f) {
+                lights_a.push_back(light);
+
+                drawContours(drawing, contours, i, /*Scalar(255, 0, 0)*/ Scalar(7, 193, 255), CV_FILLED, 4, hierarchy, 0, Point());
+                continue;
+            }
+
+            bin_image = b_proj_lights_map_red(light);
+            getBlackVsWhitePixels(bin_image, white, black);
+            if (1.0f * white / black > 0.7f) {
+                lights_r.push_back(light);
+
+                drawContours(drawing, contours, i, Scalar(54, 67, 244), CV_FILLED, 4, hierarchy, 0, Point());
+            }
         }
     }
 /*
@@ -451,7 +470,7 @@ void theFunction(int, void *) {
     Mat edge_image;
 
     char buf[1024];
-    sprintf(buf, "CS4053/CamVidLights/CamVidLights%s.png", arg1);
+    sprintf(buf, "CS4053/CamVidLights/CamVidLights%s.png", file_number);
     Mat source = imread(buf, CV_LOAD_IMAGE_COLOR);
     Mat model_o = imread("CS4053/Template14.png");
     Mat model;
@@ -483,8 +502,10 @@ void theFunction(int, void *) {
     
     Canny(src_gray, edge_image, low_threshold, low_threshold * ratio1, kernel_size);
     
-    vector<Rect> lights; //could use RotatedRect (for ellipses)
-    findLights("CS4053/red-all-2.png", source, edge_image, lights, source);
+    vector<Rect> lights_r; //could use RotatedRect (for ellipses)
+    vector<Rect> lights_a; //could use RotatedRect (for ellipses)
+    vector<Rect> lights_g; //could use RotatedRect (for ellipses)
+    findLights(source, edge_image, lights_r, lights_a, lights_g, source);
 
     /*for (int i = 0; i < lights.size(); i++) {
         float wh_ratio = 1.0f * model_o.rows / model_o.cols; // h / w
@@ -581,8 +602,8 @@ void theFunction(int, void *) {
                     found = found || (p > 0);
                 }*/
 
-            for (int i = 0; i < lights.size(); i++) {
-                Rect light = lights[i];
+            for (int i = 0; i < lights_r.size(); i++) {
+                Rect light = lights_r[i];
                 if (p_model.x < light.x && p_model.x + model_width > light.x + light.width
                     && p_model.y < light.y && p_model.y + model_height > light.y + light.height) {
                     found = true;
@@ -599,7 +620,6 @@ void theFunction(int, void *) {
         Point best_model;
         int best_hist = INT_MAX;
 
-        RNG rng(12345);
         //TODO merge with above
         for (vector<Point>::size_type i = 0; i != local_minimas_filtered.size(); i++) {
             Point point = local_minimas_filtered[i];
@@ -610,9 +630,9 @@ void theFunction(int, void *) {
             // Crop the full image to that image contained by the rectangle myROI
             // Note that this doesn't copy the data
             //cv::Mat croppedImage = image(myROI);
-            Mat binImage = src_gray(Rect(point.x, point.y, model.cols, model.rows));
-            threshold(binImage, binImage, 10, 255, THRESH_BINARY);
-            getHist(binImage, hist);
+            Mat bin_image = src_gray(Rect(point.x, point.y, model.cols, model.rows));
+            threshold(bin_image, bin_image, 10, 255, THRESH_BINARY);
+            getHist(bin_image, hist);
             cout << "i: " << hist << endl;
             if (hist.at<float>(0) < best_hist && point.x < source.cols/2) {
                 best_hist = hist.at<float>(0);
@@ -623,9 +643,7 @@ void theFunction(int, void *) {
         Point point = best_model;
         rectangle(source, point, Point(point.x + model.cols, point.y + model.rows), Scalar(0, 0, 0), 2, 8, 0);
 
-
           /// Draw for each channel
-  
 
         /*for (vector<Point>::iterator it = local_minima.begin(); it != local_minima.end(); it++) {
              {
@@ -648,7 +666,7 @@ void theFunction(int, void *) {
 
 int main( int argc, char** argv ) {
 
-    arg1 = argv[1];
+    file_number = argv[1];
     theFunction(0, 0);
 
     //namedWindow( "Display window", WINDOW_AUTOSIZE );// Create a window for display.
