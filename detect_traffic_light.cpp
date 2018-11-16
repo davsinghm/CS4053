@@ -1,4 +1,3 @@
-//#include <opencv2/core/core.hpp>
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
@@ -9,7 +8,7 @@ using namespace cv;
 using namespace std;
 
 int low_threshold = 70;
-int local_minima_threshold = 3;
+int local_minima_threshold = 50;
 int test_thresh = 5;
 
 RNG rng(12345);
@@ -49,7 +48,7 @@ void findLocalMinima(Mat& input_image, vector<Point> &local_minimas, double thre
     Mat eroded_input_image,thresholded_input_image,thresholded_input_8bit;
     erode(input_image, eroded_input_image, Mat());
     compare(input_image, eroded_input_image, local_minima, CMP_EQ);
-    threshold(input_image, thresholded_input_image, threshold_value, 255, THRESH_BINARY_INV);
+    threshold(input_image, thresholded_input_image, threshold_value, 1, THRESH_BINARY_INV);
     thresholded_input_image.convertTo(thresholded_input_8bit, CV_8U);
     bitwise_and(local_minima, thresholded_input_8bit, local_minima);
 
@@ -472,7 +471,7 @@ void theFunction(int, void *) {
     char buf[1024];
     sprintf(buf, "CS4053/CamVidLights/CamVidLights%s.png", file_number);
     Mat source = imread(buf, CV_LOAD_IMAGE_COLOR);
-    Mat model_o = imread("CS4053/Template14.png");
+    Mat model_o = imread("CS4053/Template-TrafficLight02.png");
     Mat model;
 
     float h_ratio = 0.20f, w_ratio = 0.40f; // light to frame (inc borders)
@@ -525,36 +524,39 @@ void theFunction(int, void *) {
     imshow("Chamfer Image", chamfer_image);
 
     namedWindow("Local Minima", CV_WINDOW_AUTOSIZE);
-    createTrackbar("Local Minima Value:", "Local Minima", &local_minima_threshold, 255, theFunction);
+    createTrackbar("Local Minima Value:", "Local Minima", &local_minima_threshold, 100, theFunction);
 
     int model_width = model_o.cols;
     int model_height = model_o.rows;
 
     for (float i = 1; i > 0.6; i = i - 0.5) {
         Mat matching_image;
-        Mat model_edges;
+        Mat model;
 
         resize(model_o, model, Size(i * model_width, i * model_height));
 
-        Canny(model, model_edges, low_threshold, low_threshold * ratio1, kernel_size);
-        threshold(model_edges, model_edges, 127, 255, THRESH_BINARY);
-        //imshow("Model Edges", model_edges);
+        //Canny(model, model_edges, low_threshold, low_threshold * ratio1, kernel_size);
+        threshold(model, model, 127, 255, THRESH_BINARY);
+        imshow("Model Edges", model);
+        vector<Point> local_minima;
 
-        chamferMatching(chamfer_image, model_edges, matching_image);
-        /*for(int i=0; i<matching_image.rows; i++)
+        chamferMatching(chamfer_image, model, matching_image);
+        for(int i=0; i<matching_image.rows; i++)
             for(int j=0; j<matching_image.cols; j++) {
-                int p = matching_image.at<uchar>(i,j);
-                if (p > 0) {
+                float p = matching_image.at<float>(i,j);
+              //  if (p > 0) {
                     //Point matchLoc = Point(j, i);
-                printf("matching image pixel weight: %d\n", p);
+                if (p < 400) {
+                    cout << "matching image pixel weight: " << p << endl;
+                    local_minima.push_back(Point(j, i));
+                }
                    // rectangle(source, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
                     //rectangle(result, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
                     //rectangle(dst, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
-                }
-            }*/
+                //}
+            }
 
-        vector<Point> local_minima;
-        findLocalMinima(matching_image, local_minima, local_minima_threshold);
+        //findLocalMinima(matching_image, local_minima, 1.0f * local_minima_threshold / 100);
         //normalize(local_minima, local_minima, 0, 255, NORM_MINMAX);
         //imshow("Local Minima", local_minima);
 
@@ -602,8 +604,8 @@ void theFunction(int, void *) {
                     found = found || (p > 0);
                 }*/
 
-            for (int i = 0; i < lights_r.size(); i++) {
-                Rect light = lights_r[i];
+            for (int i = 0; i < lights_g.size(); i++) {
+                Rect light = lights_g[i];
                 if (p_model.x < light.x && p_model.x + model_width > light.x + light.width
                     && p_model.y < light.y && p_model.y + model_height > light.y + light.height) {
                     found = true;
@@ -618,30 +620,32 @@ void theFunction(int, void *) {
         }
 
         Point best_model;
-        int best_hist = INT_MAX;
+        float best_ratio = 0;
 
         //TODO merge with above
         for (vector<Point>::size_type i = 0; i != local_minimas_filtered.size(); i++) {
             Point point = local_minimas_filtered[i];
             Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
             rectangle(source, point, Point(point.x + model.cols, point.y + model.rows), color, 2, 8, 0);
-            Mat hist;
+            //Mat hist;
 
             // Crop the full image to that image contained by the rectangle myROI
             // Note that this doesn't copy the data
             //cv::Mat croppedImage = image(myROI);
             Mat bin_image = src_gray(Rect(point.x, point.y, model.cols, model.rows));
             threshold(bin_image, bin_image, 10, 255, THRESH_BINARY);
-            getHist(bin_image, hist);
-            cout << "i: " << hist << endl;
-            if (hist.at<float>(0) < best_hist && point.x < source.cols/2) {
-                best_hist = hist.at<float>(0);
+            int white, black;
+            getBlackVsWhitePixels(bin_image, white, black);
+            //cout << "i: " << hist << endl;
+            float bw_ratio = black / (white+black);
+            if (bw_ratio > best_ratio) {
+                best_ratio = bw_ratio;
                 best_model = point;
             }
         }
 
         Point point = best_model;
-        rectangle(source, point, Point(point.x + model.cols, point.y + model.rows), Scalar(0, 0, 0), 2, 8, 0);
+        rectangle(source, point, Point(point.x + model.cols, point.y + model.rows), Scalar(0, 0, 255), 2, 8, 0);
 
           /// Draw for each channel
 
