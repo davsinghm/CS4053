@@ -8,11 +8,10 @@
 using namespace cv;
 using namespace std;
 
-int const max_low_threshold = 100;
+const int max_low_threshold = 100;
 int ratio1 = 4;
 int kernel_size = 3;
-int low_threshold = 70;
-int local_minima_threshold = 50;
+int low_threshold = 50;
 int test_thresh = 5;
 
 RNG rng(12345);
@@ -62,14 +61,13 @@ void findLocalMinima(Mat& input_image, vector<Point> &local_minimas, double thre
                 local_minimas.push_back(Point(j, i));
 }
 
-
 void getHist(Mat src, Mat &hist) {
 
     //Mat hsv; cvtColor(src, hsv, CV_BGR2HSV);
     int histSize = 2; //no quantization
 
-
-/*    // Quantize the hue to 30 levels
+    /*
+    // Quantize the hue to 30 levels
     // and the saturation to 32 levels
     int hbins = 30, sbins = 32;
     int histSize[] = {hbins, sbins};
@@ -78,9 +76,10 @@ void getHist(Mat src, Mat &hist) {
     // saturation varies from 0 (black-gray-white) to
     // 255 (pure spectrum color)
     float sranges[] = { 0, 256 };
-    const float* ranges[] = { hranges, sranges };*/
+    const float* ranges[] = { hranges, sranges };
+    */
     
-     /// Set the ranges ( for B,G,R) )
+    // Set the ranges ( for B,G,R) )
     float range[] = { 0, histSize } ;
     const float* histRange = { range };
     
@@ -91,36 +90,37 @@ void getHist(Mat src, Mat &hist) {
     //split( src, bgr_planes );
     calcHist(&src, 1, channels, Mat(), hist, 1, &histSize, &histRange, true, false);
 
-/*
+    /*
     int hist_w = 512; int hist_h = 400;
     int bin_w = cvRound( (double) hist_w/histSize );
 
-
     Mat histImage( hist_h, hist_w, CV_8UC3, Scalar( 0,0,0) );*/
 
-     //normalize(hist, hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
-  //normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
-  //normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
+    //normalize(hist, hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
+    //normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
+    //normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat() );
 
- // Draw the histograms for B, G and R
-   /* for (int i = 1; i < histSize; i++) {
-      line( histImage, Point( bin_w*(i-1), hist_h - cvRound(hist.at<float>(i-1)) ),
+    // Draw the histograms for B, G and R
+    /*
+    for (int i = 1; i < histSize; i++) {
+        line( histImage, Point( bin_w*(i-1), hist_h - cvRound(hist.at<float>(i-1)) ),
                        Point( bin_w*(i), hist_h - cvRound(hist.at<float>(i)) ),
                        Scalar( 255, 0, 0), 2, 8, 0  );
     //namedWindow(, CV_WINDOW_AUTOSIZE );
-  //waitKey(0);
-  }*/
+    //waitKey(0);
+    }
+    */
 
-//    imshow("calcHist Demo: " + to_string(loop), histImage );
-  //  imshow("calcHist Source: " + to_string(loop), src );
-   /* for (int i = 0; i < histSize; i++) {
+    //imshow("calcHist Demo: " + to_string(loop), histImage );
+    //imshow("calcHist Source: " + to_string(loop), src );
+    /*
+    for (int i = 0; i < histSize; i++) {
         cout << "Loop: " << loop << endl;
         cout << hist.at<float>(i) << endl;
     }
     imshow( "H-S Histogram", histImage );
 
     waitKey(0);*/
-
 
     /*calcHist( &hsv, 1, channels, Mat(), // do not use mask
              hist, 1, histSize, ranges,
@@ -129,7 +129,8 @@ void getHist(Mat src, Mat &hist) {
     //double maxVal = 0;
     //minMaxLoc(hist, 0, &maxVal, 0, 0);
 
-/*    int scale = 10;
+    /*
+    int scale = 10;
     Mat histImg = Mat::zeros(sbins * scale, hbins * 10, CV_8UC3);
 
     for( int h = 0; h < hbins; h++)
@@ -251,31 +252,109 @@ void getBlackVsWhitePixels(Mat &bin_image, int &white, int &black) {
     }
 }
 
+/*
+ * @returns true if new image is completely empty
+ */
+bool cleanBinaryImageOutsideRect(Mat &image, Rect &rect, int id) {
+
+    //imshow("Edge Image Before Cleaning: " + to_string(id), image);
+
+    Mat mask = Mat::zeros(image.size(), CV_8UC1);
+    rectangle(mask, rect, Scalar(255), CV_FILLED);
+
+    //imshow("Mask: " + to_string(id), mask);
+
+    bitwise_and(image, mask, image);
+
+    return countNonZero(image) == 0;
+}
+
 /* if contour doesn't has a parent (this happens when outer frame of traffic
  * light is not a closed loop in edge image), try to find a rectangle around
  * the @light.
  */
-Rect findParent(Rect &light) {
+Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, int id) {
 
+    Mat chamfer_image, model, matching_image;
+    const float h_ratio = 0.20f, w_ratio = 0.40f; // light to frame (inc borders)
+
+    Rect &light = light_color.first;
+    edge_image = edge_image.clone();
+
+    //resize model using ratio of circle to rect, in both ways, whichever is bigger.
+    int model_height = 1.0f * light.height / h_ratio;
+    int model_width = 1.0f * model_orig.cols / model_orig.rows * model_height;
+    if (1.0f * light.width / w_ratio > model_width) {
+        model_width = 1.0f * light.width / w_ratio;
+        model_height = 1.0f * model_orig.rows / model_orig.cols * model_width;
+    }
+
+    resize(model_orig, model, Size(model_width, model_height), 0, 0, INTER_CUBIC);
+    threshold(model, model, 127, 255, THRESH_BINARY);
+    imshow("Model Edges: " + to_string(id), model);
+
+    int x1 = max(0, light.x + light.width/2 - 0.60f * model_width); // or try 10%
+    int y1 = max(0, light.y + light.height/2 - model_height);
+    Rect range(x1, y1, min(1.1f * model_width, edge_image.cols - 1 - x1), min(2 * model_height, edge_image.rows - 1 - y1));
+    bool empty_image = cleanBinaryImageOutsideRect(edge_image, range, id);
+
+    if (empty_image)
+        return Rect(0, 0, 0, 0);
+
+    //based on light color, crop the image
+
+    threshold(edge_image, chamfer_image, 127, 255, THRESH_BINARY_INV);
+    distanceTransform(chamfer_image, chamfer_image, CV_DIST_L2, 3);
+    normalize(chamfer_image, chamfer_image, 0, 1.0, NORM_MINMAX);
+
+    imshow("Edge Image For Chamfer: " + to_string(id), edge_image);
+    imshow("Chamfer Image"+ to_string(id), chamfer_image);
+
+    //Canny(model, model_edges, low_threshold, low_threshold * ratio1, kernel_size);
+
+    //vector<Point> local_minima;
+
+    chamferMatching(chamfer_image, model, matching_image);
+    Mat test_matching_image;
+    normalize(matching_image, test_matching_image, 0, 1.0, NORM_MINMAX);
+    imshow("Chamfer normalized: " + to_string(id), test_matching_image);
+
+    float best_score = FLT_MAX;
+    Point best_point;
+    for (int i = 0; i < matching_image.rows; i++)
+        for (int j = 0; j < matching_image.cols; j++) {
+            float score = matching_image.at<float>(i, j);
+            if (score < best_score) {
+                best_score = score;
+                best_point = Point(j, i);
+            }
+
+            /*if (p < 180) {
+                cout << "matching image pixel weight: " << p << endl;
+                local_minima.push_back(Point(j, i));
+            }*/
+            //rectangle(source, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
+            //rectangle(result, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
+            //rectangle(dst, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
+        }
+
+    return Rect(best_point.x, best_point.y, model_width, model_height);
 }
 
 //find ellipses around bitmap
-void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Rect> > &lights) {
+void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rect, char>, Rect> > &lights) {
 
     //Mat edge_image1; //from orig, testing.
     //Mat src_gray1;
     //cvtColor(source, src_gray1, CV_BGR2GRAY);
-//    GaussianBlur(src_gray1, src_gray1, cv::Size(0, 0), 2.1);
+    //GaussianBlur(src_gray1, src_gray1, cv::Size(0, 0), 2.1);
     //blur(src_gray1, src_gray1, Size(4,4)); //TODO try gaussian blur?
 
     //imshow("Edge Orig", src_gray1);
-    //Canny(src_gray1, edge_image1, low_threshold*2, low_threshold * ratio1, kernel_size);
+    //Canny(src_gray1, edge_image1, low_threshold * 2, low_threshold * ratio1, kernel_size);
     //imshow("Edge Orig", edge_image1);
 
-//TODO dont clone
     Mat &drawing = source;//.clone(); //Mat::zeros(edge_image.size(), CV_8UC3);
-
-    
 
     //Mat drawing1 = source.clone(); //Mat::zeros(edge_image.size(), CV_8UC3);
 
@@ -292,7 +371,8 @@ void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Re
         //drawContours(drawing, contours_orig, i, Scalar(57, 220, 205), 1, 4, hierarchy, 0, Point());
         rectangle(drawing1, frame, color);//, int thickness=1, int lineType=8, int shift=0 )
     }
-    imshow("Drawing1", drawing1);*/
+    imshow("Drawing1", drawing1);
+    */
 
     vector< vector<Point> > circle_contours;
     Mat circle = imread("CS4053/circle.png", CV_LOAD_IMAGE_COLOR);
@@ -316,14 +396,14 @@ void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Re
     vector<Vec4i> hierarchy;
 
     //findContours(InputOutputArray image, OutputArrayOfArrays contours, OutputArray hierarchy, int mode, int method, Point offset=Point());
-    findContours(edge_image, contours, hierarchy, RETR_TREE/*RETR_EXTERNAL*//*RETR_TREE*/, CHAIN_APPROX_NONE, Point(0, 0));
+    findContours(edge_image, contours, hierarchy, RETR_TREE, CHAIN_APPROX_NONE, Point(0, 0));
 
     for (int i = 0; i< contours.size(); i++) {
 
         vector<Point> contour = contours[i];
 
         //cout << matchShapes(contour, circle_contour, CV_CONTOURS_MATCH_I1, 0);
-    //approxPolyDP(Mat(contours[i]), approx[k], 3, true);
+        //approxPolyDP(Mat(contours[i]), approx[k], 3, true);
         const float epsilon = 0.01f;
 
         vector<Point> approx;
@@ -336,9 +416,8 @@ void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Re
             if (rr_ratio > 0.6) {*/
 
         if (approx.size() > test_thresh && hierarchy[i][2] > 0 &&
-    //C++: double matchShapes(InputArray contour1, InputArray contour2, int method, double parameter)
+        //C++: double matchShapes(InputArray contour1, InputArray contour2, int method, double parameter)
             matchShapes(contour, circle_contour, CV_CONTOURS_MATCH_I1, 0) < 0.1) {
-      //      /*isContourConvex(contour)*/) {
 
             Rect light = boundingRect(contour);
             //rectangle(source, point, Point(point.x + model.cols, point.y + model.rows), color, 2, 8, 0);
@@ -371,14 +450,18 @@ void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Re
                     drawing.at<Vec3b>(point) = Vec3b(0, 0, 255);
                 }*/
 
+                pair<Rect, char> light_color = make_pair(light, 'G');
+
                 int parent = hierarchy[i][3];
                 if (parent != -1)
                     frame = boundingRect(contours[parent]);
+                else
+                    frame = findParent(edge_image, model, light_color, i);
 
                 drawContours(drawing, contours, i, Scalar(74, 195, 139), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame, Scalar(0, 0, 255));
+                rectangle(drawing, frame, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
 
-                lights.push_back(make_pair(make_pair(light, 'G'), frame));
+                lights.push_back(make_pair(light_color, frame));
 
                 continue; //since green is unique we don't need to check for red
             }
@@ -387,14 +470,18 @@ void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Re
             getBlackVsWhitePixels(bin_image, white, black); 
             if (1.0f * white / black > 0.5f) {
 
+                pair<Rect, char> light_color = make_pair(light, 'A');
+
                 int parent = hierarchy[i][3];
                 if (parent != -1)
                     frame = boundingRect(contours[parent]);
+                else
+                    frame = findParent(edge_image, model, light_color, i);
 
                 drawContours(drawing, contours, i, Scalar(7, 193, 255), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame, Scalar(0, 0, 255));
+                rectangle(drawing, frame, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
 
-                lights.push_back(make_pair(make_pair(light, 'A'), frame));
+                lights.push_back(make_pair(light_color, frame));
 
                 continue;
             }
@@ -403,14 +490,18 @@ void findLights(Mat &source, Mat &edge_image, vector< pair< pair<Rect, char>, Re
             getBlackVsWhitePixels(bin_image, white, black);
             if (1.0f * white / black > 0.7f) {
 
+                pair<Rect, char> light_color = make_pair(light, 'R');
+
                 int parent = hierarchy[i][3];
                 if (parent != -1)
                     frame = boundingRect(contours[parent]);
+                else
+                    frame = findParent(edge_image, model, light_color, i);
 
                 drawContours(drawing, contours, i, Scalar(54, 67, 244), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame, Scalar(0, 0, 255));
+                rectangle(drawing, frame, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
 
-                lights.push_back(make_pair(make_pair(light, 'R'), frame));
+                lights.push_back(make_pair(light_color, frame));
             }
         }
     }
@@ -522,27 +613,21 @@ Point   offset = Point()
 }
 
 void theFunction(int, void *) {
-    
-    Mat chamfer_image;
-    Mat chamfer_image_normalized;
-
-    Mat src_gray;
-    Mat edge_image;
 
     char buf[1024];
     sprintf(buf, "CS4053/CamVidLights/CamVidLights%s.png", file_number);
+    
+    Mat src_gray, edge_image;
     Mat source = imread(buf, CV_LOAD_IMAGE_COLOR);
-    Mat model_o = imread("CS4053/Template-TrafficLight02.png");
-    Mat model;
-
-    float h_ratio = 0.20f, w_ratio = 0.40f; // light to frame (inc borders)
-    int model_p_height = INT_MAX, model_p_width = INT_MAX; //model ratio
-    //test
+    Mat model = imread("CS4053/Template-TrafficLight.png");
 
     cvtColor(source, src_gray, CV_BGR2GRAY);
 
+    cvtColor(model, model, CV_BGR2GRAY);
+    threshold(model, model, 0,255, THRESH_BINARY);
+
     /// Reduce noise with a kernel 3x3
-    //    C++: void GaussianBlur(InputArray src, OutputArray dst, Size ksize, double sigmaX, double sigmaY=0, int borderType=BORDER_DEFAULT )
+    //  void GaussianBlur(InputArray src, OutputArray dst, Size ksize, double sigmaX, double sigmaY=0, int borderType=BORDER_DEFAULT )
     
     Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(2, 2), Point(-1,-1)); //disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
     
@@ -555,64 +640,24 @@ void theFunction(int, void *) {
     //blur(src_gray, src_gray, Size(2,2)); //TODO try gaussian blur?
     
     imshow("Source Gray", src_gray);
-
-
-    low_threshold = 50;
-        /// Canny detector
     
+    // Canny detector
     Canny(src_gray, edge_image, low_threshold, low_threshold * ratio1, kernel_size);
+    threshold(edge_image, edge_image, 0,255, THRESH_BINARY);
     
     vector< pair< pair<Rect, char>, Rect> > lights; // < light, color, parent >; color = 'R','A','G'
-    findLights(source, edge_image, lights);
+    findLights(source, edge_image, model, lights);
 
-    /*for (int i = 0; i < lights_g.size(); i++) {
+    /*
+    for (int i = 0; i < lights_g.size(); i++) {
         float wh_ratio = 1.0f * model_o.rows / model_o.cols; // h / w
         model_p_height = min(model_p_height, lights_g[i].height / h_ratio);
         model_p_width = min(model_p_width, lights_g[i].width / w_ratio);
     }
 
-    resize(model_o, model_o, Size(model_p_width, model_p_height));    imshow("Model Resized", model_o);*/
-
-    threshold(edge_image, edge_image, 127, 255, THRESH_BINARY_INV);
-    distanceTransform(edge_image, chamfer_image, CV_DIST_L2, 3);
-    normalize(chamfer_image, chamfer_image, 0, 1.0, NORM_MINMAX);
-    //imshow("Edge Map", chamfer_image_normalized);
-
-    imshow("Edge Image", edge_image);
-    imshow("Chamfer Image", chamfer_image);
-
-    namedWindow("Local Minima", CV_WINDOW_AUTOSIZE);
-    createTrackbar("Local Minima Value:", "Local Minima", &local_minima_threshold, 100, theFunction);
-
-    int model_width = model_o.cols;
-    int model_height = model_o.rows;
-
-    for (float i = 1; i > 0.6; i = i - 0.5) {
-        Mat matching_image;
-        Mat model;
-
-        resize(model_o, model, Size(i * model_width, i * model_height));
-
-        //Canny(model, model_edges, low_threshold, low_threshold * ratio1, kernel_size);
-        threshold(model, model, 127, 255, THRESH_BINARY);
-        imshow("Model Edges", model);
-        vector<Point> local_minima;
-
-        //chamferMatching(chamfer_image, model, matching_image);
-        for (int i=0; i<matching_image.rows; i++)
-            for (int j=0; j<matching_image.cols; j++) {
-                float p = matching_image.at<float>(i,j);
-              //  if (p > 0) {
-                    //Point matchLoc = Point(j, i);
-                if (p < 180) {
-                    cout << "matching image pixel weight: " << p << endl;
-                    local_minima.push_back(Point(j, i));
-                }
-                   // rectangle(source, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
-                    //rectangle(result, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
-                    //rectangle(dst, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
-                //}
-            }
+    resize(model_o, model_o, Size(model_p_width, model_p_height));
+    imshow("Model Resized", model_o);
+    */
 
         //findLocalMinima(matching_image, local_minima, 1.0f * local_minima_threshold / 100);
         //normalize(local_minima, local_minima, 0, 255, NORM_MINMAX);
@@ -717,7 +762,6 @@ void theFunction(int, void *) {
                         //rectangle(dst, matchLoc, Point(matchLoc.x + templ.cols, matchLoc.y + templ.rows), Scalar(0, 0, 255), 2, 8, 0);
                     }
         }*/
-    }
 
     namedWindow("Matching Image", CV_WINDOW_AUTOSIZE);
     createTrackbar("Low Threshold:", "Matching Image", &low_threshold, max_low_threshold, theFunction);
