@@ -18,48 +18,7 @@ RNG rng(12345);
 
 void theFunction(int, void *);
 
-//TODO merge multiple processing of hsv of source
-
 char *file_number;
-
-void erosion(Mat &src, Mat &dst, int erosion_elem, int erosion_size) {
-
-  int erosion_type;
-  if (erosion_elem == 0) erosion_type = MORPH_RECT;
-  else if (erosion_elem == 1) erosion_type = MORPH_CROSS;
-  else if (erosion_elem == 2) erosion_type = MORPH_ELLIPSE;
-
-  Mat element = getStructuringElement(erosion_type, Size(2 * erosion_size + 1, 2 * erosion_size + 1), Point(erosion_size, erosion_size));
-
-  erode(src, dst, element);
-}
-
-void dilation(Mat &src, Mat &dst, int dilation_elem, int dilation_size) {
-  
-    int dilation_type;
-    if (dilation_elem == 0) dilation_type = MORPH_RECT;
-    else if (dilation_elem == 1) dilation_type = MORPH_CROSS;
-    else if (dilation_elem == 2) dilation_type = MORPH_ELLIPSE;
-
-    Mat element = getStructuringElement(dilation_type, Size(2 * dilation_size + 1, 2 * dilation_size + 1), Point(dilation_size, dilation_size));
-
-    dilate(src, dst, element);
-}
-
-void findLocalMinima(Mat& input_image, vector<Point> &local_minimas, double threshold_value) {
-    Mat local_minima;
-    Mat eroded_input_image,thresholded_input_image,thresholded_input_8bit;
-    erode(input_image, eroded_input_image, Mat());
-    compare(input_image, eroded_input_image, local_minima, CMP_EQ);
-    threshold(input_image, thresholded_input_image, threshold_value, 1, THRESH_BINARY_INV);
-    thresholded_input_image.convertTo(thresholded_input_8bit, CV_8U);
-    bitwise_and(local_minima, thresholded_input_8bit, local_minima);
-
-    for (int i = 0; i < local_minima.rows; i++)
-        for (int j = 0; j < local_minima.cols; j++)
-            if (local_minima.at<uchar>(i, j) > 0)
-                local_minimas.push_back(Point(j, i));
-}
 
 void getHist(Mat src, Mat &hist) {
 
@@ -290,7 +249,8 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
     }
 
     resize(model_orig, model, Size(model_width, model_height), 0, 0, INTER_CUBIC);
-    threshold(model, model, 127, 255, THRESH_BINARY);
+    Canny(model, model, 50, 100, 3);
+    //threshold(model, model, 127, 255, THRESH_BINARY);
     imshow("Model Edges: " + to_string(id), model);
 
     int x1 = max(0, light.x + light.width/2 - 0.60f * model_width); // or try 10%
@@ -619,10 +579,9 @@ void theFunction(int, void *) {
     
     Mat src_gray, edge_image;
     Mat source = imread(buf, CV_LOAD_IMAGE_COLOR);
-    Mat model = imread("CS4053/Template-TrafficLight.png");
+    Mat model = imread("CS4053/Template-TrafficLight03.png");
 
     cvtColor(source, src_gray, CV_BGR2GRAY);
-
     cvtColor(model, model, CV_BGR2GRAY);
     threshold(model, model, 0,255, THRESH_BINARY);
 
