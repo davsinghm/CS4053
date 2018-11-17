@@ -342,7 +342,7 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
 }
 
 //find ellipses around bitmap
-void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rect, char>, Rect> > &lights) {
+void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rect, char>, pair<Rect, bool> > > &lights) {
 
     //Mat edge_image1; //from orig, testing.
     //Mat src_gray1;
@@ -435,7 +435,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
             //float x = ; //white ratio
             //cout << "H Potential Light: i: " << hist.at<float>(1) << " vs " << hist.at<float>(0) << endl;
             //cout << "> Potential Light: i: " << white << " vs " << black << endl;
-            Rect frame(0, 0, 0, 0);
+            pair<Rect, bool> frame;
             if (1.0f * white / black > 0.7f) {
             
                 /*if (hist.at<float>(0) < best_hist && point.x < source.cols/2) {
@@ -454,12 +454,12 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
 
                 int parent = hierarchy[i][3];
                 if (parent != -1)
-                    frame = boundingRect(contours[parent]);
+                    frame = make_pair(boundingRect(contours[parent]), true);
                 else
-                    frame = findParent(edge_image, model, light_color, i);
+                    frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
                 drawContours(drawing, contours, i, Scalar(74, 195, 139), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
+                rectangle(drawing, frame.first, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
 
                 lights.push_back(make_pair(light_color, frame));
 
@@ -474,12 +474,12 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
 
                 int parent = hierarchy[i][3];
                 if (parent != -1)
-                    frame = boundingRect(contours[parent]);
+                    frame = make_pair(boundingRect(contours[parent]), true);
                 else
-                    frame = findParent(edge_image, model, light_color, i);
+                    frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
                 drawContours(drawing, contours, i, Scalar(7, 193, 255), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
+                rectangle(drawing, frame.first, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
 
                 lights.push_back(make_pair(light_color, frame));
 
@@ -494,12 +494,12 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
 
                 int parent = hierarchy[i][3];
                 if (parent != -1)
-                    frame = boundingRect(contours[parent]);
+                    frame = make_pair(boundingRect(contours[parent]), true);
                 else
-                    frame = findParent(edge_image, model, light_color, i);
+                    frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
                 drawContours(drawing, contours, i, Scalar(54, 67, 244), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
+                rectangle(drawing, frame.first, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
 
                 lights.push_back(make_pair(light_color, frame));
             }
@@ -645,7 +645,7 @@ void theFunction(int, void *) {
     Canny(src_gray, edge_image, low_threshold, low_threshold * ratio1, kernel_size);
     threshold(edge_image, edge_image, 0,255, THRESH_BINARY);
     
-    vector< pair< pair<Rect, char>, Rect> > lights; // < light, color, parent >; color = 'R','A','G'
+    vector< pair< pair<Rect, char>, pair<Rect, bool> > > lights; // < light, color, parent, consider_full_frame >; color = 'R','A','G'
     findLights(source, edge_image, model, lights);
 
     /*
