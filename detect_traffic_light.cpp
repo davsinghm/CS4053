@@ -8,6 +8,41 @@
 using namespace cv;
 using namespace std;
 
+//ground truth, considering full light
+int full_light[14][4][4] = {
+    {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{217, 103, 261, 230}, {794, 212, 820, 294}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{347, 210, 373, 287}, {701, 259, 720, 318}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{271,  65, 339, 191}, {640, 260, 662, 301}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{261,  61, 333, 195}, {644, 269, 666, 313}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{238,  42, 319, 190}, {650, 279, 672, 323}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{307, 231, 328, 297}, {747, 266, 764, 321}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{280, 216, 305, 296}, {795, 253, 816, 316}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{359, 246, 380, 305}, {630, 279, 646, 327}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{233, 122, 299, 239}, {681, 271, 714, 315}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{331, 260, 349, 312}, {663, 280, 676, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}}, 
+    {{373, 219, 394, 279}, {715, 242, 732, 299}, {423, 316, 429, 329}, {516, 312, 521, 328}},
+    {{272, 211, 299, 261}, {604, 233, 620, 279}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{279, 188, 315, 253}, {719, 225, 740, 286}, {0, 0, 0, 0}, {0, 0, 0, 0}}};
+
+//ground truth, considering central rectangle
+int main_light[14][4][4] = {
+    {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{217, 103, 261, 230}, {794, 212, 820, 294}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{347, 210, 373, 287}, {701, 259, 720, 318}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{271,  65, 309, 189}, {640, 260, 652, 301}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{261,  61, 302, 193}, {644, 269, 657, 312}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{238,  42, 284, 187}, {650, 279, 663, 323}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{307, 231, 328, 297}, {747, 266, 764, 321}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{280, 216, 305, 296}, {795, 253, 816, 316}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{359, 246, 380, 305}, {630, 279, 646, 327}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{260, 122, 299, 239}, {691, 271, 705, 315}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{331, 260, 349, 312}, {663, 280, 676, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{373, 219, 394, 279}, {715, 242, 732, 299}, {423, 316, 429, 329}, {516, 312, 521, 328}},
+    {{283, 211, 299, 261}, {604, 233, 620, 279}, {0, 0, 0, 0}, {0, 0, 0, 0}},
+    {{294, 188, 315, 253}, {719, 225, 740, 286}, {0, 0, 0, 0}, {0, 0, 0, 0}}
+};
+
 const int max_low_threshold = 100;
 int ratio1 = 4;
 int kernel_size = 3;
@@ -16,7 +51,7 @@ int test_thresh = 5;
 
 RNG rng(12345);
 
-void theFunction(int, void *);
+//void theFunction(int, void *);
 
 char *file_number;
 
@@ -240,22 +275,24 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
     Rect &light = light_color.first;
     edge_image = edge_image.clone();
 
-    //resize model using ratio of circle to rect, in both ways, whichever is bigger.
-    int model_height = 1.0f * light.height / h_ratio;
+    //resize model using ratio of circle to rect, in both ways, whichever is smaller.
+    /*int model_height = 1.0f * light.height / h_ratio;
     int model_width = 1.0f * model_orig.cols / model_orig.rows * model_height;
-    if (1.0f * light.width / w_ratio > model_width) {
-        model_width = 1.0f * light.width / w_ratio;
-        model_height = 1.0f * model_orig.rows / model_orig.cols * model_width;
-    }
+    if (1.0f * light.width / w_ratio < model_width) {*/
+    int model_width = 1.0f * light.width / w_ratio;
+    int model_height = 1.0f * model_orig.rows / model_orig.cols * model_width;
+    //}
 
     resize(model_orig, model, Size(model_width, model_height), 0, 0, INTER_CUBIC);
     Canny(model, model, 50, 100, 3);
     //threshold(model, model, 127, 255, THRESH_BINARY);
-    imshow("Model Edges: " + to_string(id), model);
+    //imshow("Model Edges: " + to_string(id), model);
 
-    int x1 = max(0, light.x + light.width/2 - 0.60f * model_width); // or try 10%
-    int y1 = max(0, light.y + light.height/2 - model_height);
-    Rect range(x1, y1, min(1.1f * model_width, edge_image.cols - 1 - x1), min(2 * model_height, edge_image.rows - 1 - y1));
+    float err = 0.35f;
+    int color = light_color.second == 'G' ? 1 : light_color.second == 'R' ? -1 : 0;
+    int x1 = max(0, light.x + light.width / 2 - err * model_width - model_width / 2);
+    int y1 = max(0, light.y + light.height / 2 - err * model_height - model_height / 2 - color * 1.0f * model_width / 3);
+    Rect range(x1, y1, min((1 + err) * model_width, edge_image.cols - 1 - x1), min((1 + err) * model_height, edge_image.rows - 1 - y1));
     bool empty_image = cleanBinaryImageOutsideRect(edge_image, range, id);
 
     if (empty_image)
@@ -267,8 +304,8 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
     distanceTransform(chamfer_image, chamfer_image, CV_DIST_L2, 3);
     normalize(chamfer_image, chamfer_image, 0, 1.0, NORM_MINMAX);
 
-    imshow("Edge Image For Chamfer: " + to_string(id), edge_image);
-    imshow("Chamfer Image"+ to_string(id), chamfer_image);
+    //imshow("Edge Image For Chamfer: " + to_string(id), edge_image);
+    //imshow("Chamfer Image"+ to_string(id), chamfer_image);
 
     //Canny(model, model_edges, low_threshold, low_threshold * ratio1, kernel_size);
 
@@ -277,7 +314,7 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
     chamferMatching(chamfer_image, model, matching_image);
     Mat test_matching_image;
     normalize(matching_image, test_matching_image, 0, 1.0, NORM_MINMAX);
-    imshow("Chamfer normalized: " + to_string(id), test_matching_image);
+    //imshow("Chamfer normalized: " + to_string(id), test_matching_image);
 
     float best_score = FLT_MAX;
     Point best_point;
@@ -419,7 +456,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
                 drawContours(drawing, contours, i, Scalar(74, 195, 139), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame.first, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
+                rectangle(drawing, frame.first, Scalar(0, 0, 255));
 
                 lights.push_back(make_pair(light_color, frame));
 
@@ -439,7 +476,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
                 drawContours(drawing, contours, i, Scalar(7, 193, 255), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame.first, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
+                rectangle(drawing, frame.first, Scalar(0, 0, 255));
 
                 lights.push_back(make_pair(light_color, frame));
 
@@ -459,7 +496,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
                 drawContours(drawing, contours, i, Scalar(54, 67, 244), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame.first, /*Scalar(0, 0, 255)*/Scalar(rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255)));
+                rectangle(drawing, frame.first, Scalar(0, 0, 255));
 
                 lights.push_back(make_pair(light_color, frame));
             }
@@ -572,14 +609,16 @@ Point   offset = Point()
     //imshow("Back Project Drawing", drawing);
 }
 
-void theFunction(int, void *) {
+int main( int argc, char** argv ) {
+
+    file_number = argv[1];
 
     char buf[1024];
     sprintf(buf, "CS4053/CamVidLights/CamVidLights%s.png", file_number);
     
     Mat src_gray, edge_image;
     Mat source = imread(buf, CV_LOAD_IMAGE_COLOR);
-    Mat model = imread("CS4053/Template-TrafficLight03.png");
+    Mat model = imread("CS4053/Template-TrafficLight04.png");
 
     cvtColor(source, src_gray, CV_BGR2GRAY);
     cvtColor(model, model, CV_BGR2GRAY);
@@ -598,7 +637,7 @@ void theFunction(int, void *) {
     //filter2D(src_gray, src_gray, -1, disc, Point(-1, -1), 0, BORDER_DEFAULT);
     //blur(src_gray, src_gray, Size(2,2)); //TODO try gaussian blur?
     
-    imshow("Source Gray", src_gray);
+    //imshow("Source Gray", src_gray);
     
     // Canny detector
     Canny(src_gray, edge_image, low_threshold, low_threshold * ratio1, kernel_size);
@@ -606,6 +645,15 @@ void theFunction(int, void *) {
     
     vector< pair< pair<Rect, char>, pair<Rect, bool> > > lights; // < light, color, parent, consider_full_frame >; color = 'R','A','G'
     findLights(source, edge_image, model, lights);
+
+    for (int i = 0; i < lights.size(); i++) {
+        pair<Rect, char> &light_color = lights[i].first;
+        pair<Rect, bool> &frame_full = lights[i].second;
+        cout << "Light: " << i << endl;
+        cout << " Frame: " << frame_full.first << endl;
+        cout << " Full Frame?: " << frame_full.second << endl;
+        cout << " State: " << light_color.second << endl;
+    }
 
     /*
     for (int i = 0; i < lights_g.size(); i++) {
@@ -722,15 +770,9 @@ void theFunction(int, void *) {
                     }
         }*/
 
-    namedWindow("Matching Image", CV_WINDOW_AUTOSIZE);
-    createTrackbar("Low Threshold:", "Matching Image", &low_threshold, max_low_threshold, theFunction);
+    //namedWindow("Matching Image", CV_WINDOW_AUTOSIZE);
+    //createTrackbar("Low Threshold:", "Matching Image", &low_threshold, max_low_threshold, theFunction);
     imshow("Matching Image", source);
-}
-
-int main( int argc, char** argv ) {
-
-    file_number = argv[1];
-    theFunction(0, 0);
 
     //namedWindow( "Display window", WINDOW_AUTOSIZE );// Create a window for display.
     //imshow( "Display window", model );                   // Show our image inside it.
