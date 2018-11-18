@@ -1,6 +1,4 @@
 #include <opencv2/opencv.hpp>
-#include <iostream>
-#include <string>
 
 #define min(d, s) ((d < s) ? (d) : (s))
 #define max(d, s) ((d > s) ? (d) : (s))
@@ -9,7 +7,7 @@ using namespace cv;
 using namespace std;
 
 //ground truth, considering full light
-int full_light[14][4][4] = {
+int gt_full_light[14][4][4] = {
     {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{217, 103, 261, 230}, {794, 212, 820, 294}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{347, 210, 373, 287}, {701, 259, 720, 318}, {0, 0, 0, 0}, {0, 0, 0, 0}},
@@ -26,7 +24,7 @@ int full_light[14][4][4] = {
     {{279, 188, 315, 253}, {719, 225, 740, 286}, {0, 0, 0, 0}, {0, 0, 0, 0}}};
 
 //ground truth, considering central rectangle
-int main_light[14][4][4] = {
+int gt_main_light[14][4][4] = {
     {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{217, 103, 261, 230}, {794, 212, 820, 294}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{347, 210, 373, 287}, {701, 259, 720, 318}, {0, 0, 0, 0}, {0, 0, 0, 0}},
@@ -41,6 +39,24 @@ int main_light[14][4][4] = {
     {{373, 219, 394, 279}, {715, 242, 732, 299}, {423, 316, 429, 329}, {516, 312, 521, 328}},
     {{283, 211, 299, 261}, {604, 233, 620, 279}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{294, 188, 315, 253}, {719, 225, 740, 286}, {0, 0, 0, 0}, {0, 0, 0, 0}}
+};
+
+char gt_light_state[][4] = {
+    {'G', 'G', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'R', 'R', '\0', '\0'},
+    {'R'+'A', 'R'+'A', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'A', 'A', '\0', '\0'},
+    {'A', 'A', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'G', 'G', '\0', '\0'},
+    {'G', 'G',  'R',  'R'},
+    {'R', 'R', '\0', '\0'},
+    {'R', 'R', '\0', '\0'}
 };
 
 const int max_low_threshold = 100;
@@ -140,7 +156,7 @@ void getHist(Mat src, Mat &hist) {
     imshow( "H-S Histogram", histImg );*/
 }
 
-void backProjection(string filename, Mat &target, Mat &thresh) {
+void getBackProjection(string filename, Mat &target, Mat &thresh) {
 
     Mat roi = imread(filename); //region of interest
     Mat roi_hsv, target_hsv;
@@ -200,6 +216,9 @@ void backProjection(string filename, Mat &target, Mat &thresh) {
     imshow("Back Project: " + filename, thresh);*/
 }
 
+/*
+ * adapted from the book: ISBN 978-1-118-84845-6
+ */
 void chamferMatching(Mat &chamfer_image, Mat &model, Mat &matching_image) {
     // Extract the model points (as they are sparse).
     vector<Point> model_points;
@@ -207,13 +226,8 @@ void chamferMatching(Mat &chamfer_image, Mat &model, Mat &matching_image) {
     for (int model_row = 0; (model_row < model.rows); model_row++) {
         uchar *curr_point = model.ptr<uchar>(model_row);
         for (int model_column = 0; model_column < model.cols; model_column++) {
-            if (*curr_point > 0) {
-                Point new_point = Point(model_column, model_row);
-                model_points.push_back(new_point);
-                /*cout << "pushed a new point: ";
-                cout << new_point;
-                cout << endl;*/
-            }
+            if (*curr_point > 0)
+                model_points.push_back(Point(model_column, model_row));
             curr_point += image_channels;
         }
     }
@@ -235,15 +249,10 @@ void chamferMatching(Mat &chamfer_image, Mat &model, Mat &matching_image) {
 
 void getBlackVsWhitePixels(Mat &bin_image, int &white, int &black) {
     white = black = 0;
-    for (int i = 0; i < bin_image.rows; i++) {
-        for (int j = 0; j < bin_image.cols; j++) {
-            int val = (int) (bin_image.at<uchar>(i, j));
-            if (val == 255) {
-                white++;
-            } else
-                black++;
-        }
-    }
+    for (int i = 0; i < bin_image.rows; i++)
+        for (int j = 0; j < bin_image.cols; j++)
+            if ((bin_image.at<uchar>(i, j)) == 255) white++;
+            else black++;
 }
 
 /*
@@ -338,6 +347,28 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
     return Rect(best_point.x, best_point.y, model_width, model_height);
 }
 
+Rect getAverageRect(Rect rect1, Rect rect2) {
+    Rect rect;
+    rect.x = (rect1.x + rect2.x) / 2;
+    rect.y = (rect1.y + rect2.y) / 2;
+    rect.width = (rect1.x + rect1.width + rect2.x + rect2.width) / 2 - rect.x;
+    rect.height = (rect1.y + rect1.height + rect2.y + rect2.height) / 2 - rect.y;
+    return rect;
+    //TODO try union
+}
+
+/*
+ * if the two rectangles overlap, average them
+ */
+void mergeTwoParents(Rect &rect1, Rect &rect2) {
+    Rect intersection = rect1 & rect2;
+    if (intersection.area() == 0)
+        return;
+
+    rect1 = rect2 = getAverageRect(rect1, rect2);
+    //TODO try union
+}
+
 //find ellipses around bitmap
 void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rect, char>, pair<Rect, bool> > > &lights) {
 
@@ -384,9 +415,9 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
     vector<Point> circle_contour = circle_contours[0];
 
     Mat b_proj_lights_map_red, b_proj_lights_map_amber, b_proj_lights_map_green;
-    backProjection("CS4053/red-all-2.png", source, b_proj_lights_map_red);
-    backProjection("CS4053/amber-all-1.png", source, b_proj_lights_map_amber);
-    backProjection("CS4053/green-all-6.png", source, b_proj_lights_map_green);
+    getBackProjection("CS4053/red-all-2.png", source, b_proj_lights_map_red);
+    getBackProjection("CS4053/amber-all-1.png", source, b_proj_lights_map_amber);
+    getBackProjection("CS4053/green-all-6.png", source, b_proj_lights_map_green);
 
     // Mat canny_output;
     vector< vector<Point> > contours;
@@ -433,7 +464,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
             //cout << "H Potential Light: i: " << hist.at<float>(1) << " vs " << hist.at<float>(0) << endl;
             //cout << "> Potential Light: i: " << white << " vs " << black << endl;
             pair<Rect, bool> frame;
-            if (1.0f * white / black > 0.7f) {
+            if (1.0f * white / (black + white) > 0.4f) {
             
                 /*if (hist.at<float>(0) < best_hist && point.x < source.cols/2) {
                     best_hist = hist.at<float>(0);
@@ -447,6 +478,8 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                     drawing.at<Vec3b>(point) = Vec3b(0, 0, 255);
                 }*/
 
+                //average the light
+                light = getAverageRect(Rect(light.x, light.y, min(light.width, light.height), min(light.width, light.height)), Rect(light.x, light.y, max(light.width, light.height), max(light.width, light.height)));
                 pair<Rect, char> light_color = make_pair(light, 'G');
 
                 int parent = hierarchy[i][3];
@@ -455,18 +488,15 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                 else
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
-                drawContours(drawing, contours, i, Scalar(74, 195, 139), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame.first, Scalar(0, 0, 255));
-
                 lights.push_back(make_pair(light_color, frame));
-
-                continue; //since green is unique we don't need to check for red
+                continue;
             }
 
             bin_image = b_proj_lights_map_amber(light);
             getBlackVsWhitePixels(bin_image, white, black); 
-            if (1.0f * white / black > 0.5f) {
+            if (1.0f * white / (black + white) > 0.3f) {
 
+                light = getAverageRect(Rect(light.x, light.y, min(light.width, light.height), min(light.width, light.height)), Rect(light.x, light.y, max(light.width, light.height), max(light.width, light.height)));
                 pair<Rect, char> light_color = make_pair(light, 'A');
 
                 int parent = hierarchy[i][3];
@@ -475,18 +505,15 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                 else
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
-                drawContours(drawing, contours, i, Scalar(7, 193, 255), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame.first, Scalar(0, 0, 255));
-
                 lights.push_back(make_pair(light_color, frame));
-
                 continue;
             }
 
             bin_image = b_proj_lights_map_red(light);
             getBlackVsWhitePixels(bin_image, white, black);
-            if (1.0f * white / black > 0.7f) {
+            if (1.0f * white / (black + white) > 0.6f) {
 
+                light = getAverageRect(Rect(light.x, light.y, min(light.width, light.height), min(light.width, light.height)), Rect(light.x, light.y, max(light.width, light.height), max(light.width, light.height)));
                 pair<Rect, char> light_color = make_pair(light, 'R');
 
                 int parent = hierarchy[i][3];
@@ -495,13 +522,30 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                 else
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
-                drawContours(drawing, contours, i, Scalar(54, 67, 244), CV_FILLED, 4, hierarchy, 0, Point());
-                rectangle(drawing, frame.first, Scalar(0, 0, 255));
 
                 lights.push_back(make_pair(light_color, frame));
             }
         }
     }
+
+    //remove inner circle of same color
+    for (int i = 0; i < lights.size(); i++)
+        for (int j = i + 1; j < lights.size(); j++) {
+            if ((lights[i].first.first & lights[j].first.first).area() > 0) {
+                if (lights[i].first.first.area() >= lights[j].first.first.area())
+                    lights.erase(lights.begin() + j);
+                else {
+                    lights.erase(lights.begin() + i);
+                    j--;
+                }
+            }
+        }
+//    lights = lights_filtered;
+
+    //merge two parents of different lights
+    /*for (int i = 0; i < lights.size(); i++)
+        for (int j = i + 1; j < lights.size(); j++)
+            mergeTwoParents(lights[i].second.first, lights[j].second.first);*/
 /*
 /// Get the moments
   vector<Moments> mu(contours.size() );
@@ -653,6 +697,21 @@ int main( int argc, char** argv ) {
         cout << " Frame: " << frame_full.first << endl;
         cout << " Full Frame?: " << frame_full.second << endl;
         cout << " State: " << light_color.second << endl;
+
+        Scalar color;
+        if (light_color.second == 'R')
+            color = Scalar(54, 67, 244);
+        else if (light_color.second == 'A')
+            color = Scalar(7, 193, 255);
+        else if (light_color.second == 'G')
+            color = Scalar(74, 195, 139);
+
+        Rect &light = light_color.first;
+        //drawContours(drawing, contours, i, , CV_FILLED, 4, hierarchy, 0, Point());
+        RotatedRect light_rr = RotatedRect(Point(light.x + light.width / 2, light.y + light.height / 2), light.size(), 0);
+        ellipse(source, light_rr, color, CV_FILLED, LINE_AA);//, int thickness=1, int lineType=8)¶
+
+        rectangle(source, frame_full.first, Scalar(0, 0, 255));
     }
 
     /*
@@ -772,7 +831,7 @@ int main( int argc, char** argv ) {
 
     //namedWindow("Matching Image", CV_WINDOW_AUTOSIZE);
     //createTrackbar("Low Threshold:", "Matching Image", &low_threshold, max_low_threshold, theFunction);
-    imshow("Matching Image", source);
+    imshow("Result Image", source);
 
     //namedWindow( "Display window", WINDOW_AUTOSIZE );// Create a window for display.
     //imshow( "Display window", model );                   // Show our image inside it.
