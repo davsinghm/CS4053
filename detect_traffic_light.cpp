@@ -297,7 +297,6 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
                 else
                     frame = make_pair(findParent(edge_image, model, light_color, i), false);
 
-
                 lights.push_back(make_pair(light_color, frame));
             }
         }
@@ -352,7 +351,7 @@ int main(int argc, char** argv) {
         pair<Rect, char> &light_color = lights[i].first;
         pair<Rect, bool> &frame_full = lights[i].second;
         cout << "Recoginized Light: " << i << endl;
-        cout << "    Frame: " << frame_full.first << endl;
+        cout << "    Frame: (x1, y1), (x2, y2): (" << frame_full.first.x << ", " << frame_full.first.y << "), (" << frame_full.first.x + frame_full.first.width << ", " << frame_full.first.y + frame_full.first.height << ")" << endl;
         cout << "    Frame: Full?: " << (frame_full.second ? "true" : "false") << endl;
         cout << "    State: " << light_color.second << endl;
 
@@ -370,20 +369,23 @@ int main(int argc, char** argv) {
 
         //find rect from ground truth and draw
         int (*gt_light)[GT_MAX_LIGHTS][4] = frame_full.second ? &gt_full_light[0] : &gt_main_light[0];
-        Rect gt_frame;
         for (int j = 0; j < GT_MAX_LIGHTS; j++) {
             int x = gt_light[file_number - 1][j][0];
             int y = gt_light[file_number - 1][j][1];
             int width = gt_light[file_number - 1][j][2] - x;
             int height = gt_light[file_number - 1][j][3] - y;
-            Rect rect = Rect(x, y, width, height);
-            if (width != 0 && height != 0 && (frame_full.first & rect).area() > 0) {
-                gt_frame = rect;
-                rectangle(source, rect, Scalar(0, 255, 0));
-                gt_light_drawn[file_number - 1][j] = true;
+            Rect gt_frame = Rect(x, y, width, height);
+            Rect intersection = gt_frame & frame_full.first;
+            if (width != 0 && height != 0 && intersection.area() > 0) {
+
+                rectangle(source, gt_frame, Scalar(0, 255, 0));
 
                 char gt_state = gt_light_state[file_number - 1][j];
                 cout << "    State: Correct?: " << (light_color.second == gt_state ? "true" : "false") << endl;
+                float dsc = 2.0f * intersection.area() / (frame_full.first.area() + gt_frame.area());
+                cout << "    DSC: " << dsc << endl;
+
+                gt_light_drawn[file_number - 1][j] = true;
             }
         }
 
@@ -402,6 +404,7 @@ int main(int argc, char** argv) {
                 cout << "Groundtruth Light Not detected:" << endl;
                 cout << "    Frame: " << rect << endl;
                 cout << "    State: " << gt_light_state[file_number - 1][j] << endl;
+                cout << "    DSC: " << 0 << endl;
                 
                 rectangle(source, rect, Scalar(0, 255, 0));
             }
