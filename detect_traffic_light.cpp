@@ -6,15 +6,18 @@
 using namespace cv;
 using namespace std;
 
-const char* path_image = "CamVidLights/CamVidLights%s.png"; //format
+const char* path_image = "CamVidLights/CamVidLights%02d.png"; //format
 const char* path_circle = "files/circle.png";
 const char* path_model = "files/model.png";
 const char* path_bp_red = "files/red-bp.png"; //backprojection, red
 const char* path_bp_amber = "files/amber-bp.png"; //backprojection, amber
 const char* path_bp_green = "files/green-bp.png"; //backprojection, green
 
+#define GT_SIZE 14 //no of ground truth files
+#define GT_MAX_LIGHTS 4 //no of max lights per image
+
 //ground truth, considering full light
-int gt_full_light[14][4][4] = {
+int gt_full_light[GT_SIZE][GT_MAX_LIGHTS][4] = {
     {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{217, 103, 261, 230}, {794, 212, 820, 294}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{347, 210, 373, 287}, {701, 259, 720, 318}, {0, 0, 0, 0}, {0, 0, 0, 0}},
@@ -31,7 +34,7 @@ int gt_full_light[14][4][4] = {
     {{279, 188, 315, 253}, {719, 225, 740, 286}, {0, 0, 0, 0}, {0, 0, 0, 0}}};
 
 //ground truth, considering central rectangle
-int gt_main_light[14][4][4] = {
+int gt_main_light[GT_SIZE][GT_MAX_LIGHTS][4] = {
     {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{217, 103, 261, 230}, {794, 212, 820, 294}, {0, 0, 0, 0}, {0, 0, 0, 0}},
     {{347, 210, 373, 287}, {701, 259, 720, 318}, {0, 0, 0, 0}, {0, 0, 0, 0}},
@@ -48,8 +51,7 @@ int gt_main_light[14][4][4] = {
     {{294, 188, 315, 253}, {719, 225, 740, 286}, {0, 0, 0, 0}, {0, 0, 0, 0}}
 };
 
-char gt_light_state[][4] = {
-    {'G', 'G', '\0', '\0'},
+char gt_light_state[GT_SIZE][GT_MAX_LIGHTS] = {
     {'G', 'G', '\0', '\0'},
     {'G', 'G', '\0', '\0'},
     {'G', 'G', '\0', '\0'},
@@ -71,10 +73,7 @@ int ratio1 = 4;
 int kernel_size = 3;
 int low_threshold = 50;
 int test_thresh = 5;
-
 RNG rng(12345);
-
-char *file_number;
 
 void getBackProjection(string filename, Mat &target, Mat &thresh) {
 
@@ -323,11 +322,10 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
             mergeTwoParents(lights[i].second.first, lights[j].second.first);
 }
 
-int main( int argc, char** argv ) {
-
-    file_number = argv[1];
+int main(int argc, char** argv) {
 
     char buf[1024];
+    int file_number = stoi(argv[1]);
     sprintf(buf, path_image, file_number);
     
     Mat src_gray, edge_image;
@@ -340,7 +338,7 @@ int main( int argc, char** argv ) {
     
     Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(2, 2), Point(-1, -1));
     
-    GaussianBlur(src_gray, src_gray, cv::Size(0, 0), 1.5);
+    GaussianBlur(src_gray, src_gray, Size(0, 0), 1.5);
     addWeighted(src_gray, 3.5, src_gray, -1.5, 0, src_gray);
     
     Canny(src_gray, edge_image, low_threshold, low_threshold * ratio1, kernel_size);
@@ -349,13 +347,14 @@ int main( int argc, char** argv ) {
     vector< pair< pair<Rect, char>, pair<Rect, bool> > > lights;
     findLights(source, edge_image, model, lights);
 
+    bool gt_light_drawn[GT_SIZE][GT_MAX_LIGHTS] = {false};
     for (int i = 0; i < lights.size(); i++) {
         pair<Rect, char> &light_color = lights[i].first;
         pair<Rect, bool> &frame_full = lights[i].second;
-        cout << "Light: " << i << endl;
-        cout << " Frame: " << frame_full.first << endl;
-        cout << " Full Frame?: " << frame_full.second << endl;
-        cout << " State: " << light_color.second << endl;
+        cout << "Recoginized Light: " << i << endl;
+        cout << "    Frame: " << frame_full.first << endl;
+        cout << "    Frame: Full?: " << (frame_full.second ? "true" : "false") << endl;
+        cout << "    State: " << light_color.second << endl;
 
         Scalar color;
         if (light_color.second == 'R')
@@ -370,20 +369,43 @@ int main( int argc, char** argv ) {
         ellipse(source, light_rr, color, CV_FILLED, LINE_AA);
 
         //find rect from ground truth and draw
-        int (*gt_light)[4][4] = frame_full.second ? &gt_full_light[0] : &gt_main_light[0];
-        for (int j = 0; j < 4; j++) {
-            int fileno = stoi(file_number) - 1;
-            int x = gt_light[fileno][j][0];
-            int y = gt_light[fileno][j][1];
-            int width = gt_light[fileno][j][2] - x;
-            int height = gt_light[fileno][j][3] - y;
-            Rect gt_frame = Rect(x, y, width, height);
-            if (width != 0 && height != 0 && (frame_full.first & gt_frame).area() > 0)
-                rectangle(source, gt_frame, Scalar(0, 255, 0));
+        int (*gt_light)[GT_MAX_LIGHTS][4] = frame_full.second ? &gt_full_light[0] : &gt_main_light[0];
+        Rect gt_frame;
+        for (int j = 0; j < GT_MAX_LIGHTS; j++) {
+            int x = gt_light[file_number - 1][j][0];
+            int y = gt_light[file_number - 1][j][1];
+            int width = gt_light[file_number - 1][j][2] - x;
+            int height = gt_light[file_number - 1][j][3] - y;
+            Rect rect = Rect(x, y, width, height);
+            if (width != 0 && height != 0 && (frame_full.first & rect).area() > 0) {
+                gt_frame = rect;
+                rectangle(source, rect, Scalar(0, 255, 0));
+                gt_light_drawn[file_number - 1][j] = true;
+
+                char gt_state = gt_light_state[file_number - 1][j];
+                cout << "    State: Correct?: " << (light_color.second == gt_state ? "true" : "false") << endl;
+            }
         }
 
         rectangle(source, frame_full.first, Scalar(0, 0, 255));
     }
+
+    //print gt which aren't detected
+    for (int j = 0; j < GT_MAX_LIGHTS; j++)
+        if (!gt_light_drawn[file_number - 1][j]) {
+            int x = gt_main_light[file_number - 1][j][0];
+            int y = gt_main_light[file_number - 1][j][1];
+            int width = gt_main_light[file_number - 1][j][2] - x;
+            int height = gt_main_light[file_number - 1][j][3] - y;
+            Rect rect = Rect(x, y, width, height);
+            if (width != 0 && height != 0) {
+                cout << "Groundtruth Light Not detected:" << endl;
+                cout << "    Frame: " << rect << endl;
+                cout << "    State: " << gt_light_state[file_number - 1][j] << endl;
+                
+                rectangle(source, rect, Scalar(0, 255, 0));
+            }
+        }
 
     imshow("Result Image", source);
 
