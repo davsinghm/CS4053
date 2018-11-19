@@ -336,37 +336,18 @@ int main( int argc, char** argv ) {
 
     cvtColor(source, src_gray, CV_BGR2GRAY);
     cvtColor(model, model, CV_BGR2GRAY);
-    threshold(model, model, 0,255, THRESH_BINARY);
+    threshold(model, model, 0, 255, THRESH_BINARY);
     
-    Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(2, 2), Point(-1,-1));
+    Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(2, 2), Point(-1, -1));
     
     GaussianBlur(src_gray, src_gray, cv::Size(0, 0), 1.5);
     addWeighted(src_gray, 3.5, src_gray, -1.5, 0, src_gray);
     
     Canny(src_gray, edge_image, low_threshold, low_threshold * ratio1, kernel_size);
-    threshold(edge_image, edge_image, 0,255, THRESH_BINARY);
+    threshold(edge_image, edge_image, 0, 255, THRESH_BINARY);
     
     vector< pair< pair<Rect, char>, pair<Rect, bool> > > lights;
     findLights(source, edge_image, model, lights);
-
-    int fileno = stoi(file_number)-1;
-    for (int j = 0; j < 4; j++) {
-        int x = gt_full_light[fileno][j][0];
-        int y = gt_full_light[fileno][j][1];
-        int width = gt_full_light[fileno][j][2] - x;
-        int height = gt_full_light[fileno][j][3] - y;
-        if (width != 0 && height != 0)
-        rectangle(source, Rect(x, y, width, height), Scalar(0, 255, 0));
-    }
-
-    for (int j = 0; j < 4; j++) {
-        int x = gt_main_light[fileno][j][0];
-        int y = gt_main_light[fileno][j][1];
-        int width = gt_main_light[fileno][j][2] - x;
-        int height = gt_main_light[fileno][j][3] - y;
-        if (width != 0 && height != 0)
-        rectangle(source, Rect(x, y, width, height), Scalar(0, 255, 0));
-    }
 
     for (int i = 0; i < lights.size(); i++) {
         pair<Rect, char> &light_color = lights[i].first;
@@ -387,6 +368,19 @@ int main( int argc, char** argv ) {
         Rect &light = light_color.first;
         RotatedRect light_rr = RotatedRect(Point(light.x + light.width / 2, light.y + light.height / 2), light.size(), 0);
         ellipse(source, light_rr, color, CV_FILLED, LINE_AA);
+
+        //find rect from ground truth and draw
+        int (*gt_light)[4][4] = frame_full.second ? &gt_full_light[0] : &gt_main_light[0];
+        for (int j = 0; j < 4; j++) {
+            int fileno = stoi(file_number) - 1;
+            int x = gt_light[fileno][j][0];
+            int y = gt_light[fileno][j][1];
+            int width = gt_light[fileno][j][2] - x;
+            int height = gt_light[fileno][j][3] - y;
+            Rect gt_frame = Rect(x, y, width, height);
+            if (width != 0 && height != 0 && (frame_full.first & gt_frame).area() > 0)
+                rectangle(source, gt_frame, Scalar(0, 255, 0));
+        }
 
         rectangle(source, frame_full.first, Scalar(0, 0, 255));
     }
