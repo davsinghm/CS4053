@@ -6,12 +6,12 @@
 using namespace cv;
 using namespace std;
 
-const char* path_image = "CS4053/CamVidLights/CamVidLights%s.png"; //format
-const char* path_circle = "CS4053/circle.png";
-const char* path_model = "CS4053/Template-TrafficLight04.png";
-const char* path_bp_red = "CS4053/red-all-2.png"; //backprojection, red
-const char* path_bp_amber = "CS4053/amber-all-1.png"; //backprojection, amber
-const char* path_bp_green = "CS4053/green-all-6.png"; //backprojection, green
+const char* path_image = "CamVidLights/CamVidLights%s.png"; //format
+const char* path_circle = "files/circle.png";
+const char* path_model = "files/model.png";
+const char* path_bp_red = "files/red-bp.png"; //backprojection, red
+const char* path_bp_amber = "files/amber-bp.png"; //backprojection, amber
+const char* path_bp_green = "files/green-bp.png"; //backprojection, green
 
 //ground truth, considering full light
 int gt_full_light[14][4][4] = {
