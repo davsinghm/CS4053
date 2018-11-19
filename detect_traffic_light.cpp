@@ -235,7 +235,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
 
     findContours(circle, circle_contours, circle_hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
     if (circle_contours.size() < 1)
-        cout << "error circle in png not found" << endl;
+        cout << "Error: No contour found in cicle image" << endl;
 
     vector<Point> circle_contour = circle_contours[0];
     Mat b_proj_lights_map_red, b_proj_lights_map_amber, b_proj_lights_map_green;
