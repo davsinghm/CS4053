@@ -102,33 +102,22 @@ void getBackProjection(string filename, Mat &target, Mat &thresh) {
 
 /*
  * adapted from the book: ISBN 978-1-118-84845-6
+ * optimized for single channel images, and made function more readable by me.
  */
 void chamferMatching(Mat &chamfer_image, Mat &model, Mat &matching_image) {
     // Extract the model points (as they are sparse).
     vector<Point> model_points;
-    int image_channels = model.channels();
-    for (int model_row = 0; (model_row < model.rows); model_row++) {
-        uchar *curr_point = model.ptr<uchar>(model_row);
-        for (int model_column = 0; model_column < model.cols; model_column++) {
-            if (*curr_point > 0)
-                model_points.push_back(Point(model_column, model_row));
-            curr_point += image_channels;
-        }
-    }
-    int num_model_points = model_points.size();
-    image_channels = chamfer_image.channels();
+    for (int y = 0; y < model.rows; y++)
+        for (int x = 0; x < model.cols; x++)
+            if (model.at<uchar>(y, x) > 0)
+                model_points.push_back(Point(x, y));
+
     // Try the model in every possible position
-    matching_image = Mat(chamfer_image.rows - model.rows + 1, chamfer_image.cols - model.cols + 1, CV_32FC1);
-    for (int search_row = 0; search_row <= chamfer_image.rows - model.rows; search_row++) {
-        float *output_point = matching_image.ptr<float>(search_row);
-        for (int search_column = 0; search_column <= chamfer_image.cols - model.cols; search_column++) {
-            float matching_score = 0.0;
-            for (int point_count = 0; point_count < num_model_points; point_count++) 
-                matching_score += (float) *(chamfer_image.ptr<float>(model_points[point_count].y + search_row) + search_column + model_points[point_count].x * image_channels);
-            *output_point = matching_score;
-            output_point++;
-        }
-    }
+    matching_image = Mat::zeros(chamfer_image.rows - model.rows + 1, chamfer_image.cols - model.cols + 1, CV_32FC1);
+    for (int y = 0; y < matching_image.rows; y++)
+        for (int x = 0; x < matching_image.cols; x++)
+            for (int i = 0; i < model_points.size(); i++) 
+                matching_image.at<float>(y, x) += chamfer_image.at<float>(y + model_points[i].y, x + model_points[i].x);
 }
 
 void getBlackVsWhitePixels(Mat &bin_image, int &white, int &black) {
@@ -181,7 +170,6 @@ Rect findParent(Mat edge_image, Mat &model_orig, pair<Rect, char> &light_color, 
         return Rect(0, 0, 0, 0);
 
     //based on light color, crop the image
-
     threshold(edge_image, chamfer_image, 127, 255, THRESH_BINARY_INV);
     distanceTransform(chamfer_image, chamfer_image, CV_DIST_L2, 3);
     normalize(chamfer_image, chamfer_image, 0, 1.0, NORM_MINMAX);
