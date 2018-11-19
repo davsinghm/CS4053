@@ -6,6 +6,13 @@
 using namespace cv;
 using namespace std;
 
+const char* path_image = "CS4053/CamVidLights/CamVidLights%s.png"; //format
+const char* path_circle = "CS4053/circle.png";
+const char* path_model = "CS4053/Template-TrafficLight04.png";
+const char* path_bp_red = "CS4053/red-all-2.png"; //backprojection, red
+const char* path_bp_amber = "CS4053/amber-all-1.png"; //backprojection, amber
+const char* path_bp_green = "CS4053/green-all-6.png"; //backprojection, green
+
 //ground truth, considering full light
 int gt_full_light[14][4][4] = {
     {{319, 202, 346, 279}, {692, 264, 711, 322}, {0, 0, 0, 0}, {0, 0, 0, 0}},
@@ -221,7 +228,7 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
 
     Mat &drawing = source;
     vector< vector<Point> > circle_contours;
-    Mat circle = imread("CS4053/circle.png", CV_LOAD_IMAGE_COLOR);
+    Mat circle = imread(path_circle, CV_LOAD_IMAGE_COLOR);
     cvtColor(circle, circle, CV_BGR2GRAY);
     Canny(circle, circle, 50, 100, 3);
     vector<Vec4i> circle_hierarchy;
@@ -231,11 +238,10 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
         cout << "error circle in png not found" << endl;
 
     vector<Point> circle_contour = circle_contours[0];
-
     Mat b_proj_lights_map_red, b_proj_lights_map_amber, b_proj_lights_map_green;
-    getBackProjection("CS4053/red-all-2.png", source, b_proj_lights_map_red);
-    getBackProjection("CS4053/amber-all-1.png", source, b_proj_lights_map_amber);
-    getBackProjection("CS4053/green-all-6.png", source, b_proj_lights_map_green);
+    getBackProjection(path_bp_red, source, b_proj_lights_map_red);
+    getBackProjection(path_bp_amber, source, b_proj_lights_map_amber);
+    getBackProjection(path_bp_green, source, b_proj_lights_map_green);
 
     vector< vector<Point> > contours;
     vector<Vec4i> hierarchy;
@@ -334,11 +340,11 @@ int main( int argc, char** argv ) {
     file_number = argv[1];
 
     char buf[1024];
-    sprintf(buf, "CS4053/CamVidLights/CamVidLights%s.png", file_number);
+    sprintf(buf, path_image, file_number);
     
     Mat src_gray, edge_image;
     Mat source = imread(buf, CV_LOAD_IMAGE_COLOR);
-    Mat model = imread("CS4053/Template-TrafficLight04.png");
+    Mat model = imread(path_model);
 
     cvtColor(source, src_gray, CV_BGR2GRAY);
     cvtColor(model, model, CV_BGR2GRAY);
