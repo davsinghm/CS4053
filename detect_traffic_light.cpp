@@ -350,7 +350,7 @@ int main( int argc, char** argv ) {
     cvtColor(model, model, CV_BGR2GRAY);
     threshold(model, model, 0,255, THRESH_BINARY);
     
-    Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(2, 2), Point(-1,-1)); //disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+    Mat disc = getStructuringElement(MORPH_ELLIPSE, Size(2, 2), Point(-1,-1));
     
     GaussianBlur(src_gray, src_gray, cv::Size(0, 0), 1.5);
     addWeighted(src_gray, 3.5, src_gray, -1.5, 0, src_gray);
