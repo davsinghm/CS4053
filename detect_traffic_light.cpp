@@ -543,9 +543,9 @@ void findLights(Mat &source, Mat &edge_image, Mat &model, vector< pair< pair<Rec
 //    lights = lights_filtered;
 
     //merge two parents of different lights
-    /*for (int i = 0; i < lights.size(); i++)
+    for (int i = 0; i < lights.size(); i++)
         for (int j = i + 1; j < lights.size(); j++)
-            mergeTwoParents(lights[i].second.first, lights[j].second.first);*/
+            mergeTwoParents(lights[i].second.first, lights[j].second.first);
 /*
 /// Get the moments
   vector<Moments> mu(contours.size() );
@@ -689,6 +689,25 @@ int main( int argc, char** argv ) {
     
     vector< pair< pair<Rect, char>, pair<Rect, bool> > > lights; // < light, color, parent, consider_full_frame >; color = 'R','A','G'
     findLights(source, edge_image, model, lights);
+
+    int fileno = stoi(file_number)-1;
+    for (int j = 0; j < 4; j++) {
+        int x = gt_full_light[fileno][j][0];
+        int y = gt_full_light[fileno][j][1];
+        int width = gt_full_light[fileno][j][2] - x;
+        int height = gt_full_light[fileno][j][3] - y;
+        if (width != 0 && height != 0)
+        rectangle(source, Rect(x, y, width, height), Scalar(0, 255, 0));
+    }
+
+    for (int j = 0; j < 4; j++) {
+        int x = gt_main_light[fileno][j][0];
+        int y = gt_main_light[fileno][j][1];
+        int width = gt_main_light[fileno][j][2] - x;
+        int height = gt_main_light[fileno][j][3] - y;
+        if (width != 0 && height != 0)
+        rectangle(source, Rect(x, y, width, height), Scalar(0, 255, 0));
+    }
 
     for (int i = 0; i < lights.size(); i++) {
         pair<Rect, char> &light_color = lights[i].first;
